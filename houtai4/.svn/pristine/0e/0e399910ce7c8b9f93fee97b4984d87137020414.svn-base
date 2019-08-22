@@ -1,0 +1,425 @@
+<style scoped>
+    @import '../../styles/common.less';
+    .ivu-btn-primary {
+        margin: 2px 2px;
+    }
+    .loadbox{position:absolute;width:100%;height:100%;
+        background:rgba(0,0,0,.2);
+        z-index: 9999999;}
+    .loadbox img{width:100px;height:100px;position:absolute;top:50%;left:50%;margin-left:-50px;margin-top:-50px;}
+</style>
+<template>
+    <div style="padding: 5px">
+        <div class="loadbox" :hidden="imgshow" >
+            <img src="../../images/d161165956e23.gif"  class="loadingimg" />
+        </div>
+        <Card>
+            <Row>
+                <span @keyup.enter="queryMyListClick" ><Input placeholder="请输入保洁员id..." v-model="queryBody.cleanerId" style="width: 200px;padding: 3px" clearable/></span>
+                <span @keyup.enter="queryMyListClick" ><Input placeholder="请输入保洁员姓名..." v-model="queryBody.cleanerName" style="width: 200px;padding: 3px" clearable/></span>
+                <span @keyup.enter="queryMyListClick" ><Input placeholder="请输入手机..." v-model="queryBody.telephone" style="width: 200px;padding: 3px" clearable/></span>
+
+                <Select placeholder="提现方式" v-model="queryBody.withdrawWay" style="width:200px;padding: 3px" clearable>
+                    <Option v-for="item in typeSelector" :value="item.value" :key="item.value">{{ item.label }}</Option>
+                </Select>
+                <Select placeholder="状态" v-model="queryBody.status" style="width:200px;padding: 3px" clearable>
+                    <Option v-for="item in statusSel" :value="item.value" :key="item.value">{{ item.label }}</Option>
+                </Select>
+                <Row style="padding: 3px" id="address_row">
+                    <span>服务地区: </span>
+                    <Select placeholder="请选择省份" v-model="cityCode.province" style="width:200px;padding: 3px" clearable @on-change="selProvince">
+                        <Option v-for="item in provinceList" :value="item.id" :key="item.id">{{item.name}}</Option>
+                    </Select>
+                    <Select placeholder="请选择城市" v-model="cityCode.city" style="width:200px;padding: 3px" clearable @on-change="selCity">
+                        <Option v-for="item in cityList" :value="item.id" :key="item.id">{{item.name}}</Option>
+                    </Select>
+                    <Select placeholder="请选择区" v-model="cityCode.town" style="width:200px;padding: 3px" clearable>
+                        <Option v-for="item in townList" :value="item.id" :key="item.id">{{item.name}}</Option>
+                    </Select>
+                </Row>
+
+
+                <div style="padding: 3px">
+                    <DatePicker type="date" placement="bottom-start" v-model="startWithdrawTime" style="width: 150px;" placeholder="提现开始日期" clearable></DatePicker>
+                    -
+                    <DatePicker type="date" placement="bottom-end" v-model="endWithdrawTime" style="width: 150px;" placeholder="提现截止日期" clearable></DatePicker>
+                    <span @click="queryMyListClick" ><Button type="primary" icon="search">查询</Button></span>
+                    <span @click="showRule" ><Button type="success" icon="search">提现规则</Button></span>
+                    <span style="margin-left: 3px;"><Button type="success" @click="exportExcel">导出excel</Button></span>
+                </div>
+
+            </Row>
+            <Row class="margin-top-10 searchable-table-con1">
+                <Table border :columns="columns" :data="myList" :loading="tableLoading" no-data-text="暂无数据"></Table>
+                <Page style="margin-top: 5px" show-total
+                      :total="queryBody.pagination.total"
+                      :current="queryBody.pagination.page"
+                      :page-size="queryBody.pagination.size"
+                      @on-change="changePage"
+                      show-elevator
+                ></Page>
+            </Row>
+        </Card>
+
+        <!--提现规则模块-->
+        <Modal :width="300" v-model="withRule" title="提现规则" @on-ok="" @on-cancel="" ok-text="返回" cancel-text="" :closable=false :mask-closable=false>
+            <Input v-model="viewingRule" readonly type="textarea" :rows="8"></Input>
+        </Modal>
+
+        <!--提现审核模块-->
+        <Modal :width="450" v-model="verifyShow" title="提现审核" :closable=false :mask-closable=false>
+            <Row>
+                <Form :model="viewModel" :labelWidth="90" inline>
+                    <FormItem prop="user" label="用户名称" >
+                        <Input type="text" v-model="viewModel.cleanerName" :readonly="disableEdit"></Input>
+                    </FormItem>
+                    <FormItem prop="user" label="开户银行" >
+                        <Input type="text" v-model="viewModel.bankName" :readonly="disableEdit"></Input>
+                    </FormItem>
+                    <FormItem prop="user" label="开户人" >
+                        <Input type="text" v-model="viewModel.bankAccountName" :readonly="disableEdit"></Input>
+                    </FormItem>
+                    <FormItem prop="user" label="银行帐号" >
+                        <Input type="text" v-model="viewModel.bankAccountNo" :readonly="disableEdit"></Input>
+                    </FormItem>
+                    <FormItem prop="user" label="账户余额" >
+                        <Input type="text" v-model="viewModel.balance" :readonly="disableEdit"></Input>
+                    </FormItem>
+                    <FormItem prop="user" label="提现金额" >
+                        <Input type="text" v-model="viewModel.withdrawMoney" :readonly="disableEdit"></Input>
+                    </FormItem>
+                </Form>
+            </Row>
+            <Row>
+                <Form :labelWidth="90" inline>
+                    <FormItem label="审核人" >
+                        <Input type="text" v-model="userName" readonly></Input>
+                    </FormItem>
+                </Form>
+            </Row>
+            <Row>
+                <Form :labelWidth="90" inline>
+                    <FormItem label="历史备注">
+                        <Input readonly v-model="viewModel.auditRemark" type="textarea" style="width: 300px" :rows="5" placeholder="请输入审核备注..."></Input>
+                    </FormItem>
+                    <FormItem label="审核状态" >
+                        <Select v-model="viewModel.status" :style="{width: $util.width}">
+                            <Option v-for="item in statusSel" :value="item.value" :key="item.value">{{ item.label }}</Option>
+                        </Select>
+                    </FormItem>
+                    <FormItem prop="remark" label="追加备注" >
+                        <Input v-model="appendOrderRemark" style="width: 300px" type="textarea" placeholder="请追加备注..." :rows="5"></Input>
+                    </FormItem>
+                </Form>
+            </Row>
+            <div slot="footer">
+                <Button type="ghost" @click="cancel">返回</Button>
+                <Button type="primary" @click="ok">确定</Button>
+            </div>
+        </Modal>
+    </div>
+</template>
+<script>
+    import Cookies from 'js-cookie';
+    export default {
+        data () {
+            return {
+                queryUrl:'/withdraw/list',//获取列表
+                auditUrl:'/withdraw/audit',
+                queryBody:{//请求体
+                    pagination:{
+                        currentIndex:0,
+                        page:1,
+                        size:10
+                    }
+                },
+                ruleQueryUrl:'/sys/list',
+                ruleQueryBody:{
+                    pagination: {
+                        page: 1,
+                        size: 11,
+                        total: 0
+                    },
+                    type: 1
+                },
+                provinceList: [],
+                cityList: [],
+                townList: [],
+                cityCode: {
+                    province: null,
+                    city: null,
+                    town: null
+                },
+                editCityCode: {
+                    province: null,
+                    city: null,
+                    town: null
+                },
+                viewingRule:'',
+                tableLoading:true,
+                disableEdit:true,
+
+                statusSel:[
+                    {value:0, label:'未审核'},
+                    {value:1, label:'已通过'},
+                    {value:2, label:'审核不通过'},
+                    {value:3, label:'已放款'}
+                ],
+
+                typeSelector:[
+                    {value:1, label:'银行转账'}
+                ],
+
+                withRule:false,
+                editShow:false,
+                verifyShow:false,
+                startWithdrawTime:null,
+                endWithdrawTime:null,
+
+                appendOrderRemark:'',
+                viewModel:{},//编辑单个的实体
+                userName:this.$util.getUserName(),
+                userId:this.$util.getUserId(),
+
+                columns: [//字段
+                    {title: 'id', key: 'id', align:'center'},
+                    {title: '保洁员名称', key: 'cleanerName', align:'center'},
+                    {title: '钱包余额', key: 'balance', align:'center'},
+                    {title: '提现金额', key: 'withdrawMoney', align:'center'},
+                    {title: '提现状态', key: 'status', align:'center'
+                        ,render:(h, params) => {
+                        let self = this;
+                        let obj = self.myList[params.index].status;
+                        if (obj === 0) obj= h('div', {attrs:{style:'color:brown'}}, '未审核');
+                        else if(obj === 1) obj=  h('div', {attrs:{style:'color:blue'}}, '审核通过');
+                        else if(obj === 2) obj=  h('div', {attrs:{style:'color:red'}}, '审核不通过');
+                        else if(obj === 3) obj=  h('div', {attrs:{style:'color:green'}}, '已放款');
+                        else obj = h('div', {attrs:{style:'color:brown'}}, '未知');
+                        return obj;
+                    }
+                    },
+                    {title: '提现时间', key: 'withdrawTime', align:'center', minWidth:70
+                        ,render:(h, params) => {
+                        let self = this;
+                        let obj = self.myList[params.index].withdrawTime;
+                        obj = new Date(obj).formatDef();
+                        return h('div', obj);
+                    }
+                    },
+                    {title: '审核时间', key: 'auditTime', align:'center', minWidth:70
+                        ,render:(h, params) => {
+                        let self = this;
+                        if (params.row.status === 0){
+                            return h('div', '暂未审核');
+                        }
+                        let obj = self.myList[params.index].auditTime;
+                        obj = new Date(obj).formatDef();
+                        return h('div', obj);
+                    }
+                    },
+//                    {title: '审核备注', key: 'auditRemark', align:'center'},
+                    {title: '操作', key: 'action', align: 'center', fixed:'right', width:130,//操作
+                        render: (h, params) => {
+                            let arr = [];
+                            let access = this.$util.getAccess('withdraw_audit');
+                            if (access)arr.push(h('Button', {props: {type: 'warning', size: 'small'}, on: {click: () => {this.verify(params.index)}}}, '审核'));
+                            return h('div', arr);
+                        }
+                    }
+                ]
+                ,myList:[],
+                imgshow:true
+
+
+            }
+        },
+
+        created () {
+            let self = this;
+            let cityCode = 100000;
+            let levelType = 1;
+            let prop = 'provinceList';
+            self.$util.cityCodeSelect(self, cityCode, levelType, prop);
+        },
+        mounted(){
+            let self = this;
+            self.queryMyList();
+        },
+        methods:{
+            // 省份确定城市
+            selProvince (val) {
+                let self = this;
+
+                if (self.editShow) {
+                    // 非搜索列表情况下
+                    self.editCityCode.city = null;
+                    self.editCityCode.town = null;
+                } else {
+                    // 搜索列表情况下
+                    self.cityCode.city = null;
+                    self.cityCode.town = null;
+                }
+
+                self.$util.cityCodeSelect(self, val, 2, 'cityList');
+            },
+            selCity (val) {
+                let self = this;
+
+                if (self.editShow) {
+                    // 非搜索列表情况下
+                    self.editCityCode.town = null;
+                } else {
+                    // 搜索列表情况下
+                    self.cityCode.town = null;
+                }
+
+                self.$util.cityCodeSelect(self, val, 3, 'townList');
+            },
+
+
+            changePage(val){
+                let self = this;
+                self.queryBody.pagination.page = val;
+                self.queryMyList();
+
+            },
+            queryMyListClick(){
+                let self = this;
+                self.queryBody.pagination = {page:1, total:10, size:10};
+                self.queryMyList();
+            },
+            queryMyList(){
+                let self = this;
+                self.tableLoading = true;
+
+                self.queryBody.startWithdrawTime = self.startWithdrawTime;
+                self.queryBody.endWithdrawTime = self.endWithdrawTime;
+
+                if (self.$util.isEmpty(self.cityCode.town) && !self.$util.isEmpty(self.cityCode.city)) {
+                    self.queryBody.cityCodes = [self.cityCode.city];
+                } else if (!self.$util.isEmpty(self.cityCode.town)) {
+                    self.queryBody.cityCodes = [self.cityCode.town];
+                } else {
+                    delete self.queryBody.cityCodes;
+                }
+
+                self.$util.deleteBlankProp(self.queryBody);
+                if (self.startWithdrawTime !== '' && self.startWithdrawTime !== undefined && self.startWithdrawTime !== null){
+                    let date = self.startWithdrawTime;
+                    self.queryBody.startWithdrawTime = date.formatDef();
+                }
+                if (self.endWithdrawTime !== '' && self.endWithdrawTime !== undefined && self.endWithdrawTime !== null){
+                    let date = self.endWithdrawTime;
+                    let dateStr = date.formatDef();
+                    dateStr = dateStr.split(' ')[0] + ' 23:59:59';
+                    self.queryBody.endWithdrawTime = dateStr;
+                }
+                let refType = Cookies.get('refType');
+                let userId = Cookies.get('userId');
+                self.queryBody.refType=refType;
+                self.queryBody.userId=userId;
+                self.$axios.post(self.queryUrl, self.queryBody).then((res) => {
+                    self.queryBody.pagination=res.pagination;
+                    delete self.queryBody.pagination.currentIndex;
+                    self.$util.sortArr(res.list, 'withdrawTime');
+                    self.myList = res.list;
+                    self.tableLoading = false;
+                })
+            },
+            ok () {
+                let self = this;
+                let auditEntity = {};
+                auditEntity.operator = self.userId;
+
+                auditEntity.status  = self.viewModel.status;
+
+                auditEntity.remark = (self.viewModel.auditRemark===null||self.viewModel.auditRemark.trim()===''?'':self.viewModel.auditRemark+'\r\n')+
+                    new Date().format('yyyy-MM-dd hh:mm:ss')+': '+self.$util.getUserName() + ',' + '审核状态:' +
+                    (auditEntity.status === 0? '未审核': auditEntity.status === 1? '审核通过': auditEntity.status === 2? '审核不通过': auditEntity.status === 3? '已放款':'未知') +
+                    ',备注' + '->'+self.appendOrderRemark;
+
+                auditEntity.withdrawId  = self.viewModel.id;
+
+                self.$axios.post(self.auditUrl, auditEntity).then((res) => {
+                    self.$Notice.success({title:'提现审核', desc:'审核成功!'});
+                    self.verifyShow = false;
+                    self.queryMyList();
+                });
+            },
+            cancel () {
+                let self = this;
+                self.verifyShow = false;
+            },
+            showRule(){
+                let self = this;
+
+                self.$axios.post(self.ruleQueryUrl, self.ruleQueryBody).then(res => {
+                    self.viewingRule = res[0].content;
+                    self.withRule = true;
+                });
+            },
+            verify(index){
+                let self = this;
+                self.viewModel = JSON.parse(JSON.stringify(self.myList[index]));
+                self.verifyShow = true;
+            },
+            exportExcel(){
+
+                let self = this;
+                if (self.$util.isEmpty(self.queryBody.startWithdrawTime)) {
+                    self.$Message.error({content: '请选择提现开始日期!'});
+                    return;
+                }
+                if (self.$util.isEmpty(self.queryBody.endWithdrawTime)) {
+                    self.$Message.error({content: '请选择提现结束日期!'});
+                    return;
+                }
+                let queryBody = {};
+                queryBody.req = {};
+                queryBody.req.startWithdrawTime =self.startWithdrawTime.formatDef();
+
+                if (self.$util.isEmpty(self.cityCode.town) && !self.$util.isEmpty(self.cityCode.city)) {
+                 queryBody.req.cityCodes = [self.cityCode.city];
+                } else if (!self.$util.isEmpty(self.cityCode.town)) {
+                   queryBody.req.cityCodes = [self.cityCode.town];
+                } else {
+                    delete queryBody.req.cityCodes;
+                }
+
+                queryBody.req.cleanerName =self.queryBody.cleanerName;
+                queryBody.req.endWithdrawTime = self.endWithdrawTime.formatDef();
+            //    self.$Message.error({content: '还不是服务商!'+self.startWithdrawTime.formatDef()});
+                let axios = self.$axios.create({
+                    baseURL: self.$axios.defaults.baseURL
+                });
+                this.imgshow = false;
+             //   self.$Message.error({content: '还不是服务商!'});
+                axios({ // 用axios发送post请求
+                    method: 'post',
+                    url: 'withdraw/export', // 请求地址
+                    data: queryBody,  // 参数
+                    responseType: 'blob'   // 表明返回服务器返回的数据类型
+                }).then((res) => { // 处理返回的文件流
+                    let blob = new Blob([res.data], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8'}); //application/vnd.openxmlformats-officedocument.spreadsheetml.sheet这里表示xlsx类型
+                    // if(blob.size > 114){
+                        let downloadElement = document.createElement('a');
+                        let href = window.URL.createObjectURL(blob); //创建下载的链接
+                        downloadElement.href = href;
+                        downloadElement.download = '提现管理信息表.xls'; //下载后文件名
+                        document.body.appendChild(downloadElement);
+                        downloadElement.click(); //点击下载
+                        document.body.removeChild(downloadElement); //下载完成移除元素
+                        window.URL.revokeObjectURL(href); //释放掉blob对象
+                        self.tableLoading = false;
+                        this.queryMyList();
+                    // }else {
+                    //     self.$Message.error({content: '导出错误了(｡･∀･)!'});
+                    // }
+                    self.imgshow = true
+                });
+
+
+            }
+        }
+    }
+</script>
