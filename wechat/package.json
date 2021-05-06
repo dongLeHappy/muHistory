@@ -19,7 +19,7 @@
     "node-sass": "^4.9.0",
     "sass-loader": "^7.0.3",
     "strophe.js": "^1.2.16",
-    "underscore": "^1.9.1",
+    "underscore": "^1.12.1",
     "vue": "^2.5.2",
     "vue-router": "^3.0.1"
   },
